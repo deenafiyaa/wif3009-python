@@ -1,0 +1,21 @@
+# Environment — NEVER commit your API key
+backend/.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Editor
+.DS_Store
+.vscode/
+.idea/
+*.swp
