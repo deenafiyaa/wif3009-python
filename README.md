@@ -10,8 +10,7 @@ pip install -r requirements.txt
 ```
 
 ### 2. Add your OpenRouter API key
-Copy `.env.example` into `.env`
-Edit `.env`:
+Copy `.env.example` into `.env`:
 ```
 OPENROUTER_API_KEY=your-openrouter-api-key-here
 ```
