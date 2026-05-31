@@ -2,43 +2,22 @@
 
 A full-stack AI-powered dating profile auditing tool with a Python FastAPI backend and a dark forensic-themed frontend.
 
-## Project Structure
-
-```
-redflag/
-├── backend/
-│   ├── main.py          # FastAPI app — all routes
-│   ├── audit.py         # 5-stage pipeline logic
-│   ├── samples.py       # Sample profile data
-│   ├── .env             # YOUR API KEY GOES HERE (never commit this)
-│   └── requirements.txt
-├── frontend/
-│   ├── templates/
-│   │   └── index.html   # Main HTML page (Jinja2)
-│   └── static/
-│       ├── style.css    # All styles
-│       └── app.js       # All frontend JS
-└── README.md
-```
-
 ## Setup & Run
 
 ### 1. Install dependencies
 ```bash
-cd backend
 pip install -r requirements.txt
 ```
 
-### 2. Add your Anthropic API key
-Edit `backend/.env`:
+### 2. Add your OpenAI API key
+Edit `.env`:
 ```
-ANTHROPIC_API_KEY=sk-ant-api03-YOUR-KEY-HERE
+OPENROUTER_API_KEY=your-openrouter-api-key-here
 ```
 Get a key at: https://console.anthropic.com
 
 ### 3. Start the server
 ```bash
-cd backend
 uvicorn main:app --reload --port 8000
 ```
 
@@ -58,7 +37,7 @@ Visit: http://localhost:8000
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ANTHROPIC_API_KEY` | Yes | Your Anthropic API key |
+| `OPENROUTER_API_KEY` | Yes | Your Anthropic API key |
 | `PORT` | No | Server port (default: 8000) |
 | `ALLOWED_ORIGINS` | No | CORS origins (default: *) |
 
