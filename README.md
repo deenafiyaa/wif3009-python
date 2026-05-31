@@ -9,12 +9,13 @@ A full-stack AI-powered dating profile auditing tool with a Python FastAPI backe
 pip install -r requirements.txt
 ```
 
-### 2. Add your OpenAI API key
+### 2. Add your OpenRouter API key
+Copy `.env.example` into `.env`
 Edit `.env`:
 ```
 OPENROUTER_API_KEY=your-openrouter-api-key-here
 ```
-Get a key at: https://console.anthropic.com
+Get a key at: https://openrouter.ai/openrouter/free
 
 ### 3. Start the server
 ```bash
@@ -37,7 +38,7 @@ Visit: http://localhost:8000
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `OPENROUTER_API_KEY` | Yes | Your Anthropic API key |
+| `OPENROUTER_API_KEY` | Yes | Your OpenRouter API key |
 | `PORT` | No | Server port (default: 8000) |
 | `ALLOWED_ORIGINS` | No | CORS origins (default: *) |
 
