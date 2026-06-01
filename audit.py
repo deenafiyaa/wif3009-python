@@ -15,8 +15,29 @@ just by changing the model name string in .env.
 import re
 import os
 import json
+import base64
+import tempfile
+from typing import Optional
 from openai import OpenAI
 from pydantic import BaseModel
+
+try:
+    from ultralytics import YOLO
+    _YOLO_AVAILABLE = True
+except Exception:
+    _YOLO_AVAILABLE = False
+
+try:
+    import pandas as pd
+    _PANDAS_AVAILABLE = True
+except Exception:
+    _PANDAS_AVAILABLE = False
+
+try:
+    from PIL import Image
+    _PIL_AVAILABLE = True
+except Exception:
+    _PIL_AVAILABLE = False
 
 
 # ── PYDANTIC MODELS ────────────────────────────────────────────────────────────
@@ -29,6 +50,10 @@ class ProfileInput(BaseModel):
     drugs: str = "never"
     status: str = "single"
     age: int = 28
+    # Optional profile picture as a base64 data URL (data:image/...;base64,...)
+    picture: Optional[str] = None
+    picture_filename: str = ""
+    picture_size_kb: int = 0
 
 
 class DarkTriad(BaseModel):
@@ -55,6 +80,98 @@ class Flag(BaseModel):
     severity: str   # high | medium | low
 
 
+# Visual flag mapping (YOLO class -> (category, description, severity))
+VISUAL_FLAG_MAP = {
+    # common COCO-like classes
+    'motorcycle': ('behavioral', 'Appears to be riding a motorcycle or superbike', 'high'),
+    'bicycle': ('behavioral', 'Bicycle or cycling gear visible', 'low'),
+    'bottle': ('behavioral', 'Alcohol or bottle visible (possible drinking)', 'medium'),
+    'wine glass': ('behavioral', 'Holding a wine glass (possible drinking)', 'medium'),
+    'cup': ('behavioral', 'Cup or drinking container visible', 'low'),
+    'book': ('identity', 'Book or reading material visible (positive signal)', 'low'),
+    'sports ball': ('identity', 'Sports equipment visible (positive signal)', 'low'),
+    'dog': ('identity', 'Pet present (positive social signal)', 'low'),
+    'cat': ('identity', 'Pet present (positive social signal)', 'low'),
+    'cell phone': ('behavioral', 'Phone visible (neutral)', 'low'),
+}
+
+def explain_yolo_objects_with_ai(detected_objects: list[str], profile: ProfileInput) -> str:
+    """
+    Ask AI to explain whether YOLO-detected objects may be red flags or positive signals.
+    """
+    if not detected_objects:
+        return "No clear objects were detected in the image."
+
+    objects_text = ", ".join(detected_objects)
+
+    prompt = f"""
+You are analysing a dating profile picture.
+
+YOLO detected these objects:
+{objects_text}
+
+Profile info:
+Bio: {profile.bio}
+Smokes: {profile.smokes}
+Drinks: {profile.drinks}
+Drugs: {profile.drugs}
+Status: {profile.status}
+Age: {profile.age}
+
+Explain whether the detected objects may be:
+1. Red flags
+2. Neutral signals
+3. Positive signals
+
+Important:
+- Do not judge the person unfairly.
+- Explain based only on visible objects.
+- Mention contradiction if image object conflicts with profile info.
+- Keep the explanation short and clear.
+"""
+
+    openrouter_key = os.getenv("OPENROUTER_API_KEY", "")
+    gemini_key = os.getenv("GEMINI_API_KEY", "")
+
+    if openrouter_key and openrouter_key != "your-openrouter-api-key-here":
+        client = OpenAI(
+            api_key=openrouter_key,
+            base_url="https://openrouter.ai/api/v1",
+        )
+
+        response = client.chat.completions.create(
+            model=os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct"),
+            messages=[
+                {"role": "system", "content": "You explain YOLO image detections for dating profile safety analysis."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.3,
+            max_tokens=400,
+        )
+
+        return response.choices[0].message.content or ""
+
+    elif gemini_key and gemini_key != "your-gemini-api-key-here":
+        client = OpenAI(
+            api_key=gemini_key,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        )
+
+        response = client.chat.completions.create(
+            model="gemini-1.5-flash",
+            messages=[
+                {"role": "system", "content": "You explain YOLO image detections for dating profile safety analysis."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.3,
+            max_tokens=400,
+        )
+
+        return response.choices[0].message.content or ""
+
+    return "No AI API key configured, so YOLO objects were detected but not explained."
+
+
 class AuditResult(BaseModel):
     overall_risk: int
     financial_risk: int
@@ -72,23 +189,65 @@ class AuditResult(BaseModel):
     stage1_score: int
     stage1_passed: bool
     provider: str       # which AI provider was used (for transparency)
-    model_used: str     # exact model name (for transparency)
+    llm_model: str      # exact model name (for transparency)
+    picture_b64: Optional[str] = None
+    visual_flags: list[Flag] = []
+    visual_ai_explanation: Optional[str] = None
 
 
 # ── STAGE 1: STATISTICAL SCREENING ────────────────────────────────────────────
 
+def load_stage1_model(model_path: str = "stage1_okcupid_model.joblib"):
+    if not _PANDAS_AVAILABLE:
+        return None
+    try:
+        import joblib
+    except Exception:
+        return None
+    if not os.path.exists(model_path):
+        return None
+    try:
+        return joblib.load(model_path)
+    except Exception:
+        return None
+
+
 def stage1_statistical(profile: ProfileInput) -> tuple[int, bool]:
     """
-    Proxy for an SVM / Logistic Regression trained on OkCupid tabular features.
-
-    Production version: load backend/model/stage1_svm.pkl (see train_model.py).
-    Current version: rule-based scoring that mirrors what a trained model learns
-    from the same features. Replace the body of this function after running
-    train_model.py — see the Setup Guide for exact replacement code.
+    Use a trained stage1 model when available, otherwise fallback to
+    a rule-based OkCupid proxy.
 
     Returns:
         (risk_score 0-100, passed_clean bool)
     """
+    model = load_stage1_model()
+    if model is not None:
+        try:
+            import pandas as pd
+            row = pd.DataFrame([{
+                "smokes": profile.smokes,
+                "drinks": profile.drinks,
+                "diet": profile.diet,
+                "drugs": profile.drugs,
+                "status": profile.status,
+                "age": profile.age,
+                "body_type": "unknown",
+                "education": "unknown",
+                "ethnicity": "unknown",
+                "height": 0,
+                "income": 0,
+                "job": "unknown",
+                "religion": "unknown",
+                "sign": "unknown",
+                "bio_text": profile.bio,
+            }])
+            proba = model.predict_proba(row)[0]
+            positive_index = list(model.classes_).index(1) if 1 in model.classes_ else 1
+            score = int(min(100, max(0, proba[positive_index] * 100)))
+            return score, score < 40
+        except Exception:
+            pass
+
     score = 0
 
     # Drug use signals (strongest predictor in OkCupid data)
@@ -302,11 +461,202 @@ def stage4_dark_triad(bio: str) -> DarkTriad:
     )
 
 
+def train_yolo_from_csv(csv_path: str, output_dir: str = 'yolodata', model: str = 'yolov8n.pt', epochs: int = 50):
+    """
+    Helper to convert a CSV of annotations to YOLOv8 training format and kick off training.
+
+    Expected CSV columns: image_path, class_id, x1, y1, x2, y2
+    Coordinates should be absolute pixel coordinates. The function will create
+    a dataset under `output_dir` with `images/` and `labels/` and then call
+    ultralytics.YOLO(model).train(data=..., epochs=...)
+    """
+    if not _PANDAS_AVAILABLE or not _PIL_AVAILABLE or not _YOLO_AVAILABLE:
+        raise RuntimeError('pandas, Pillow and ultralytics are required to run training')
+
+    df = pd.read_csv(csv_path)
+    os.makedirs(output_dir, exist_ok=True)
+    images_out = os.path.join(output_dir, 'images')
+    labels_out = os.path.join(output_dir, 'labels')
+    os.makedirs(images_out, exist_ok=True)
+    os.makedirs(labels_out, exist_ok=True)
+
+    # gather unique images
+    for img_path, group in df.groupby('image_path'):
+        try:
+            im = Image.open(img_path)
+            w, h = im.size
+        except Exception:
+            print(f"Skipping missing/unreadable image: {img_path}")
+            continue
+
+        # copy image to images_out
+        dst_img = os.path.join(images_out, os.path.basename(img_path))
+        if os.path.abspath(img_path) != os.path.abspath(dst_img):
+            try:
+                im.save(dst_img)
+            except Exception:
+                # last resort: copy file
+                import shutil
+                shutil.copy(img_path, dst_img)
+
+        # write label file
+        lbl_lines = []
+        for _, row in group.iterrows():
+            cls = int(row['class_id'])
+            x1, y1, x2, y2 = float(row['x1']), float(row['y1']), float(row['x2']), float(row['y2'])
+            xc = ((x1 + x2) / 2.0) / w
+            yc = ((y1 + y2) / 2.0) / h
+            bw = (x2 - x1) / w
+            bh = (y2 - y1) / h
+            lbl_lines.append(f"{cls} {xc:.6f} {yc:.6f} {bw:.6f} {bh:.6f}")
+
+        lbl_path = os.path.join(labels_out, os.path.splitext(os.path.basename(img_path))[0] + '.txt')
+        with open(lbl_path, 'w', encoding='utf8') as f:
+            f.write('\n'.join(lbl_lines))
+
+    # prepare a minimal data YAML for ultralytics
+    data_yaml = os.path.join(output_dir, 'data.yaml')
+    num_classes = int(df['class_id'].max()) + 1
+    with open(data_yaml, 'w', encoding='utf8') as f:
+        f.write(f"train: {os.path.abspath(images_out)}\n")
+        f.write(f"val: {os.path.abspath(images_out)}\n")
+        f.write(f"nc: {num_classes}\n")
+        f.write("names: []\n")
+
+    # call ultralytics training
+    model_obj = YOLO(model)
+    model_obj.train(data=data_yaml, epochs=epochs)
+
+
+def _load_okcupid_table(dataset_path: str):
+    if not _PANDAS_AVAILABLE:
+        raise RuntimeError('pandas is required to load OkCupid dataset')
+    try:
+        return pd.read_csv(dataset_path)
+    except Exception:
+        return pd.read_excel(dataset_path, engine='openpyxl')
+
+
+def train_okcupid_stage1_model(
+    dataset_path: str,
+    output_model: str = 'stage1_okcupid_model.joblib',
+    test_size: float = 0.2,
+    random_state: int = 42,
+):
+    """
+    Train a stage1 risk classifier from the OkCupid profile dataset.
+
+    The helper uses lifestyle and essay text features to learn a proxy
+    red-flag risk score from the provided dataset. The model is saved to
+    `output_model` for future fast inference in `stage1_statistical()`.
+    """
+    if not _PANDAS_AVAILABLE:
+        raise RuntimeError('pandas is required to train the OkCupid model')
+    try:
+        from sklearn.compose import ColumnTransformer
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.model_selection import train_test_split
+        from sklearn.pipeline import Pipeline
+        from sklearn.preprocessing import OneHotEncoder, StandardScaler
+        from sklearn.metrics import classification_report, accuracy_score
+        import joblib
+    except Exception as e:
+        raise RuntimeError('scikit-learn and joblib are required to train the OkCupid model') from e
+
+    df = _load_okcupid_table(dataset_path)
+    if df is None or df.shape[0] == 0:
+        raise RuntimeError(f'No rows found in dataset: {dataset_path}')
+
+    text_cols = ['essay0', 'essay8', 'essay9']
+    for col in text_cols:
+        if col not in df.columns:
+            df[col] = ''
+    df['bio_text'] = df[text_cols].fillna('').agg(' '.join, axis=1)
+
+    for col in ['smokes', 'drinks', 'drugs', 'status', 'body_type', 'education', 'ethnicity', 'job', 'religion', 'sign']:
+        if col not in df.columns:
+            df[col] = 'unknown'
+        df[col] = df[col].fillna('unknown').astype(str)
+
+    for col in ['age', 'height', 'income']:
+        if col not in df.columns:
+            df[col] = 0
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+
+    risk_pattern = re.compile(
+        r"\b(drunk|drinking|smoke|cigarette|cocaine|weed|marijuana|high|stoned|molly|mdma|trouble|crazy|hate|angry|broken|pass my test|not here to make friends)\b",
+        re.I,
+    )
+
+    def label_row(row):
+        text = str(row['bio_text']).lower()
+        if row['drugs'] in ('often', 'sometimes'):
+            return 1
+        if row['smokes'] not in ('no', 'unknown'):
+            return 1
+        if row['drinks'] in ('often', 'very often', 'desperately'):
+            return 1
+        if row['status'] in ('married', 'seeing someone'):
+            return 1
+        if risk_pattern.search(text):
+            return 1
+        return 0
+
+    df['risk_target'] = df.apply(label_row, axis=1)
+    if df['risk_target'].sum() == 0:
+        raise RuntimeError('Could not derive any positive risk targets from the OkCupid dataset.')
+
+    feature_text = ['bio_text']
+    feature_cats = ['smokes', 'drinks', 'drugs', 'status', 'body_type', 'education', 'ethnicity', 'job', 'religion', 'sign']
+    feature_nums = ['age', 'height', 'income']
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ('text', TfidfVectorizer(max_features=2000, ngram_range=(1, 2), stop_words='english'), 'bio_text'),
+            ('cat', OneHotEncoder(handle_unknown='ignore', sparse=False), feature_cats),
+            ('num', StandardScaler(), feature_nums),
+        ],
+        remainder='drop',
+    )
+
+    pipeline = Pipeline([
+        ('preprocessor', preprocessor),
+        ('classifier', LogisticRegression(max_iter=1000, class_weight='balanced')),
+    ])
+
+    X = df[feature_text + feature_cats + feature_nums]
+    y = df['risk_target']
+
+    stratify = y if len(set(y)) > 1 else None
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=test_size, random_state=random_state, stratify=stratify,
+    )
+
+    pipeline.fit(X_train, y_train)
+    y_pred = pipeline.predict(X_test)
+    report = classification_report(y_test, y_pred, zero_division=0)
+    acc = accuracy_score(y_test, y_pred)
+
+    joblib.dump(pipeline, output_model)
+    print(f'Trained stage1 OkCupid model: {output_model}')
+    print(f'Accuracy: {acc:.4f}')
+    print(report)
+
+    return pipeline, report
+
+
 # ── STAGE 5: LLM CHAIN-OF-THOUGHT (OpenRouter / Gemini) ───────────────────────
 
-SYSTEM_PROMPT = """You are an expert dating profile auditing AI specialising in forensic linguistics, behavioural psychology, and deceptive communication detection.
+SYSTEM_PROMPT = """You are an expert dating profile auditing AI specialising in forensic linguistics, behavioural psychology, visual analysis, and deceptive communication detection.
 
-You receive a structured pre-processing summary from a 4-stage pipeline and the raw profile. Your role is Stage 5: semantic Chain-of-Thought reasoning that refines and enriches the pipeline scores.
+You receive a structured pre-processing summary from a 4-stage pipeline, the raw profile, and possibly a profile picture. Your role is Stage 5: semantic Chain-of-Thought reasoning that refines and enriches the pipeline scores.
+
+If a profile picture is provided, analyse it for:
+- RED FLAG VISUAL SIGNALS: smoking/vaping, excessive drinking/beer cans, drug paraphernalia, dangerous vehicles (superbikes, sports cars), aggressive/narcissistic posing, provocative clothing, closed/guarded body language, harsh facial expressions, tattoos of dark symbolism.
+- POSITIVE VISUAL SIGNALS: reading books, sports/fitness activities (gym, yoga, running), volunteering/community service, family moments, pets, cultural activities, outdoor recreation, genuine smiling, open/relaxed body language, professional attire.
+
+In cot_reasoning, cite specific VISUAL observations when a picture is present (e.g., "Picture shows smoking habit" or "Reading in natural setting suggests intellectual interests").
 
 Respond ONLY with a valid JSON object. No markdown, no backticks, no preamble, no trailing text.
 
@@ -354,6 +704,20 @@ def _build_user_message(
         f"  - Stated '{c.stated}' but bio contains: \"{c.detected}\" [severity: {c.severity}]"
         for c in contradictions
     ) or "  None detected by rules engine."
+    # Picture metadata section for LLM with detailed visual analysis instructions
+    if profile.picture:
+        pic_section = (
+            f"Profile picture attached: filename={profile.picture_filename or 'unknown'}, size_kb={profile.picture_size_kb}.\n"
+            "\nVISUAL ANALYSIS REQUIRED:\n"
+            "  RED FLAGS (risky visual signals): smoking, vaping, alcohol/beer cans, drug paraphernalia, superbikes, sports cars, \n"
+            "    narcissistic posing, aggressive expression, closed body language, revealing/provocative clothing, dark tattoos.\n"
+            "  POSITIVE SIGNALS (healthy indicators): reading, books, sports/fitness activities, yoga, volunteering, family, pets, \n"
+            "    cultural activities, hiking, outdoor recreation, genuine smile, open posture, professional dress.\n"
+            "\nCite SPECIFIC visual observations in cot_reasoning (e.g., 'Picture shows person smoking' or 'Reading book suggests intellectual interests').\n"
+            "If you cannot view the image, explicitly state so and rely only on textual/categorical signals.\n"
+        )
+    else:
+        pic_section = "Profile picture: None provided.\n"
 
     return f"""PIPELINE PRE-PROCESSING SUMMARY
 ================================
@@ -386,6 +750,7 @@ Categorical fields:
   status: {profile.status}
   age:    {profile.age}
 
+{pic_section}
 TASK: Perform Stage 5 Chain-of-Thought semantic audit. Refine all scores using your full linguistic understanding. Cite specific bio phrases in cot_reasoning."""
 
 
@@ -456,59 +821,161 @@ async def run_audit(profile: ProfileInput) -> AuditResult:
     """
     Orchestrates the full 5-stage pipeline.
 
-    Stages 1–4 run locally in Python (fast, no API cost).
-    Stage 5 calls the configured LLM provider (OpenRouter or Gemini).
+    Stages 1–4 run locally in Python.
+    YOLO detects objects from uploaded image.
+    Stage 5 LLM explains the full profile + YOLO visual findings.
     """
 
-    # ── Local stages (no network calls) ───────────────────────────
+    # ── Local stages ───────────────────────────
     s1_score, s1_passed = stage1_statistical(profile)
-    linguistic          = stage2_linguistic(profile.bio)
-    contradictions      = stage3_contradictions(profile)
-    dark_triad          = stage4_dark_triad(profile.bio)
+    linguistic = stage2_linguistic(profile.bio)
+    contradictions = stage3_contradictions(profile)
+    dark_triad = stage4_dark_triad(profile.bio)
 
-    # ── Stage 5: LLM provider selection ───────────────────────────
+    # ── YOLO visual detection ──────────────────
+    visual_flags = []
+    detected_objects = []
+    visual_ai_explanation = ""
+
+    if profile.picture and _YOLO_AVAILABLE:
+        tmp_path = None
+
+        try:
+            header, b64 = profile.picture.split(",", 1) if "," in profile.picture else ("", profile.picture)
+            img_bytes = base64.b64decode(b64)
+
+            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
+                tf.write(img_bytes)
+                tmp_path = tf.name
+
+            model_path = os.getenv("YOLO_MODEL", "yolov8n.pt")
+            model = YOLO(model_path)
+
+            results = model.predict(source=tmp_path, verbose=False)
+            det = results[0]
+
+            names = model.names if hasattr(model, "names") else {}
+
+            if hasattr(det, "boxes") and len(det.boxes) > 0:
+                for box in det.boxes:
+                    try:
+                        cls = int(box.cls.cpu().numpy()[0])
+                    except Exception:
+                        continue
+
+                    name = names.get(cls, str(cls)).lower()
+                    name_key = name.replace("_", " ")
+
+                    detected_objects.append(name_key)
+
+                    if name_key in VISUAL_FLAG_MAP:
+                        cat, txt, sev = VISUAL_FLAG_MAP[name_key]
+                        visual_flags.append(
+                            Flag(
+                                category=cat,
+                                text=txt,
+                                severity=sev
+                            )
+                        )
+
+            # Remove duplicate objects
+            detected_objects = list(dict.fromkeys(detected_objects))
+
+            if detected_objects:
+                visual_ai_explanation = explain_yolo_objects_with_ai(
+                    detected_objects,
+                    profile
+                )
+
+        except Exception as e:
+            print("YOLO detection failed:", e)
+            visual_flags = []
+            detected_objects = []
+            visual_ai_explanation = ""
+
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+
+    # ── Build Stage 5 LLM message ───────────────
     user_msg = _build_user_message(
-        profile, s1_score, s1_passed, linguistic, contradictions, dark_triad
+        profile,
+        s1_score,
+        s1_passed,
+        linguistic,
+        contradictions,
+        dark_triad
     )
 
+    # Add YOLO detected objects to LLM prompt
+    if detected_objects:
+        user_msg += "\n\nYOLO DETECTED OBJECTS:\n"
+        user_msg += ", ".join(detected_objects)
+
+    # Add rule-based visual flags
+    if visual_flags:
+        user_msg += "\n\nVISUAL FLAGS FROM YOLO MAP:\n"
+        user_msg += "\n".join(
+            f"- {v.text} [category: {v.category}, severity: {v.severity}]"
+            for v in visual_flags
+        )
+
+    # Add AI explanation of YOLO objects
+    if visual_ai_explanation:
+        user_msg += "\n\nAI VISUAL EXPLANATION:\n"
+        user_msg += visual_ai_explanation
+
+    # ── Stage 5: LLM provider selection ─────────
     openrouter_key = os.getenv("OPENROUTER_API_KEY", "")
-    gemini_key     = os.getenv("GEMINI_API_KEY", "")
+    gemini_key = os.getenv("GEMINI_API_KEY", "")
 
     if openrouter_key and openrouter_key != "your-openrouter-api-key-here":
         data, model_used = _call_openrouter(user_msg)
-        provider_used    = "openrouter"
+        provider_used = "openrouter"
+
     elif gemini_key and gemini_key != "your-gemini-api-key-here":
         data, model_used = _call_gemini(user_msg)
-        provider_used    = "gemini"
+        provider_used = "gemini"
+
     else:
         raise RuntimeError("No AI API key configured. Set OPENROUTER_API_KEY in backend/.env")
 
-    # ── Assemble final result ─────────────────────────────────────
+    # ── Assemble final result ───────────────────
     return AuditResult(
         overall_risk=data.get("overall_risk", 50),
         financial_risk=data.get("financial_risk", 20),
         emotional_risk=data.get("emotional_risk", 30),
         identity_risk=data.get("identity_risk", 20),
+
         dark_triad=DarkTriad(**data.get("dark_triad", {
-            "narcissism":       dark_triad.narcissism,
-            "machiavellianism": dark_triad.machiavellianism,
-            "psychopathy":      dark_triad.psychopathy,
+            "narcissism": dark_triad.narcissism,
+            "machiavellianism": dark_triad.machiellianism if hasattr(dark_triad, "machiellianism") else dark_triad.machiavellianism,
+            "psychopathy": dark_triad.psychopathy,
         })),
+
         linguistic=LinguisticFeatures(**data.get("linguistic", {
-            "sentiment_score":    linguistic.sentiment_score,
-            "complexity":         linguistic.complexity,
+            "sentiment_score": linguistic.sentiment_score,
+            "complexity": linguistic.complexity,
             "manipulation_score": linguistic.manipulation_score,
         })),
-        # Use LLM's contradictions if it found any, otherwise keep Stage 3's findings
+
         contradictions=[Contradiction(**c) for c in data.get("contradictions", [])] or contradictions,
         flags=[Flag(**f) for f in data.get("flags", [])],
+        visual_flags=visual_flags or [Flag(**f) for f in data.get("visual_flags", [])],
+
         cot_reasoning=data.get("cot_reasoning", ""),
         educational_tip=data.get("educational_tip", ""),
         precision_estimate=data.get("precision_estimate", 0.80),
         recall_estimate=data.get("recall_estimate", 0.72),
         iou_estimate=data.get("iou_estimate", 0.61),
+
         stage1_score=s1_score,
         stage1_passed=s1_passed,
         provider=provider_used,
-        model_used=model_used,
+        llm_model=model_used,
+        picture_b64=profile.picture,
+        visual_ai_explanation=visual_ai_explanation,
     )
