@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RedFlag AI — Dating Profile Auditor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@300;400;500&family=Instrument+Sans:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<!-- SCANLINE -->
+<div class="scanlines" aria-hidden="true"></div>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">
+    <div class="dot" aria-hidden="true"></div>
+    RedFlag<span class="accent">AI</span>
+    <span class="nav-badge">BETA</span>
+  </div>
+  <div class="nav-links">
+    <a href="#how">How it works</a>
+    <a href="#app">Audit</a>
+    <a href="#pipeline">Pipeline</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero" aria-labelledby="hero-title">
+  <div class="hero-tag">
+    <span class="blink" aria-hidden="true"></span>
+    Multi-stage AI profile auditing · OkCupid dataset
+  </div>
+  <h1 id="hero-title">
+    Detect dating<br/>
+    <span class="accent">red flags</span><br/>
+    before you swipe.
+  </h1>
+  <p class="hero-sub">
+    A 5-stage ensemble AI — combining statistical screening, NLP fingerprinting,
+    contradiction detection, Dark Triad scoring, and Chain-of-Thought LLM reasoning —
+    to audit dating profiles for psychological and behavioural red flags.
+  </p>
+  <a href="#app" class="hero-cta">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    Audit a profile now
+  </a>
+  <div class="hero-stats" role="list">
+    <div class="stat-item" role="listitem"><div class="num">59,946</div><div class="lbl">OkCupid profiles</div></div>
+    <div class="stat-item" role="listitem"><div class="num">5</div><div class="lbl">Pipeline stages</div></div>
+    <div class="stat-item" role="listitem"><div class="num">3</div><div class="lbl">Risk dimensions</div></div>
+    <div class="stat-item" role="listitem"><div class="num">CoT</div><div class="lbl">Chain-of-Thought</div></div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how" class="section" aria-labelledby="how-title">
+  <div class="section-label" aria-hidden="true">Architecture</div>
+  <h2 id="how-title" class="section-title">How the pipeline works</h2>
+  <div class="pipeline-grid" role="list">
+    <div class="pipeline-step" role="listitem">
+      <div class="pipe-num c-green">01</div>
+      <div class="pipe-title">Statistical</div>
+      <div class="pipe-desc">SVM + Logistic Regression on tabular fields. SMOTE for class imbalance.</div>
+    </div>
+    <div class="pipeline-step" role="listitem">
+      <div class="pipe-num c-blue">02</div>
+      <div class="pipe-title">Linguistic</div>
+      <div class="pipe-desc">TF-IDF + sentiment analysis. Complexity scoring. Topic modeling.</div>
+    </div>
+    <div class="pipeline-step" role="listitem">
+      <div class="pipe-num c-amber">03</div>
+      <div class="pipe-title">Contradiction</div>
+      <div class="pipe-desc">Cross-reference stated fields vs. essay text for veracity signals.</div>
+    </div>
+    <div class="pipeline-step" role="listitem">
+      <div class="pipe-num c-purple">04</div>
+      <div class="pipe-title">Dark Triad</div>
+      <div class="pipe-desc">Narcissism, Machiavellianism, Psychopathy pattern detection.</div>
+    </div>
+    <div class="pipeline-step" role="listitem">
+      <div class="pipe-num c-red">05</div>
+      <div class="pipe-title">LLM Reasoning</div>
+      <div class="pipe-desc">Chain-of-Thought audit via Gemini AI for semantic explanation.</div>
+    </div>
+  </div>
+</section>
+
+<!-- APP -->
+<section id="app" class="section" aria-labelledby="app-title">
+  <div class="section-label" aria-hidden="true">Interactive Auditor</div>
+  <h2 id="app-title" class="section-title">Profile Audit Agent</h2>
+
+  <!-- Server status banner -->
+  <div id="statusBanner" class="status-banner" role="alert" aria-live="polite" style="display:none;"></div>
+
+  <div class="app-widget">
+    <!-- Topbar -->
+    <div class="app-topbar">
+      <div class="app-topbar-title">
+        <div class="status-dot" id="serverDot" aria-hidden="true"></div>
+        <span id="serverStatus">AUDIT TERMINAL v2.0 · CONNECTING…</span>
+      </div>
+      <div class="app-version">RedFlagAI · Gemini AI</div>
+    </div>
+
+    <!-- Tab bar -->
+    <div class="tab-row" role="tablist" aria-label="Audit sections">
+      <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="panel-input" id="tab-input" onclick="switchTab('input', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+        Profile Input
+      </button>
+      <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-report" id="tab-report" onclick="switchTab('report', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        Audit Report
+      </button>
+      <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-metrics" id="tab-metrics" onclick="switchTab('metrics', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Model Metrics
+      </button>
+      <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-pipeline" id="tab-pipeline" onclick="switchTab('pipeline', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Pipeline Detail
+      </button>
+    </div>
+
+    <!-- INPUT PANEL -->
+    <div class="panel active" id="panel-input" role="tabpanel" aria-labelledby="tab-input">
+      <div class="input-grid">
+        <!-- Left: bio + fields -->
+        <div>
+          <div class="card mb1">
+            <div class="card-label">Sample profiles</div>
+            <div class="sample-select-row">
+              <select id="sampleSelect" aria-label="Choose a sample profile">
+                <option value="">— select a sample profile —</option>
+              </select>
+              <button class="load-btn" onclick="loadSample()" aria-label="Load selected sample">Load ↓</button>
+            </div>
+
+            <div class="card-label">Profile bio / essays</div>
+            <textarea
+              id="bioText"
+              placeholder="Paste a dating profile bio here, or select a sample above…"
+              aria-label="Profile bio text"
+              maxlength="5000"
+            ></textarea>
+            <div class="char-count" id="charCount">0 / 5000</div>
+
+            <div class="field-grid">
+              <div class="field-item">
+                <label for="fSmokes">Smokes</label>
+                <select id="fSmokes">
+                  <option value="no">No</option>
+                  <option value="sometimes">Sometimes</option>
+                  <option value="yes">Yes</option>
+                </select>
+              </div>
+              <div class="field-item">
+                <label for="fDrinks">Drinks</label>
+                <select id="fDrinks">
+                  <option value="socially">Socially</option>
+                  <option value="often">Often</option>
+                  <option value="never">Never</option>
+                </select>
+              </div>
+              <div class="field-item">
+                <label for="fDiet">Diet</label>
+                <select id="fDiet">
+                  <option value="anything">Anything</option>
+                  <option value="vegetarian">Vegetarian</option>
+                  <option value="vegan">Vegan</option>
+                  <option value="strictly vegan">Strictly vegan</option>
+                </select>
+              </div>
+              <div class="field-item">
+                <label for="fDrugs">Drugs</label>
+                <select id="fDrugs">
+                  <option value="never">Never</option>
+                  <option value="sometimes">Sometimes</option>
+                  <option value="often">Often</option>
+                </select>
+              </div>
+              <div class="field-item">
+                <label for="fStatus">Status</label>
+                <select id="fStatus">
+                  <option value="single">Single</option>
+                  <option value="available">Available</option>
+                  <option value="seeing someone">Seeing someone</option>
+                </select>
+              </div>
+              <div class="field-item">
+                <label for="fAge">Age</label>
+                <input type="number" id="fAge" value="28" min="18" max="99" aria-label="Age" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: pipeline status + run -->
+        <div>
+          <div class="card mb1">
+            <div class="card-label">Pipeline status</div>
+            <div class="pipe-status-list" role="list">
+              <div class="pipe-status-row" role="listitem"><span>Statistical screening</span><span class="badge badge-green">Active</span></div>
+              <div class="pipe-status-row" role="listitem"><span>Linguistic fingerprinting</span><span class="badge badge-green">Active</span></div>
+              <div class="pipe-status-row" role="listitem"><span>Contradiction engine</span><span class="badge badge-green">Active</span></div>
+              <div class="pipe-status-row" role="listitem"><span>Dark Triad scoring</span><span class="badge badge-green">Active</span></div>
+              <div class="pipe-status-row" role="listitem"><span>LLM reasoning (Gemini)</span><span class="badge badge-blue">Stage 5</span></div>
+            </div>
+
+            <button class="analyze-btn" id="analyzeBtn" onclick="runAnalysis()">
+              <svg id="btnIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <span id="btnText">Run Full Audit</span>
+            </button>
+
+            <div class="progress-wrap" id="progressWrap" aria-live="polite" aria-label="Analysis progress">
+              <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressBar">
+                <div class="progress-fill" id="progressFill"></div>
+              </div>
+              <div class="progress-msg" id="progressMsg">Initialising pipeline…</div>
+            </div>
+          </div>
+
+          <div class="card info-card">
+            <div class="card-label">About this tool</div>
+            <p class="info-text">
+              This tool analyses text and categorical data from dating profiles using a 5-stage AI pipeline.
+              Analysis runs entirely on our server — no data is stored or shared.
+            </p>
+            <p class="info-text" style="margin-top:8px;color:var(--text3);">
+              For academic and educational purposes. Based on the open-source OkCupid dataset.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- REPORT PANEL -->
+    <div class="panel" id="panel-report" role="tabpanel" aria-labelledby="tab-report">
+      <div id="reportContent">
+        <div class="placeholder-msg">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <p>Run an audit to generate a report</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- METRICS PANEL -->
+    <div class="panel" id="panel-metrics" role="tabpanel" aria-labelledby="tab-metrics">
+      <div id="metricsContent">
+        <div class="placeholder-msg">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <p>Model metrics appear after analysis</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- PIPELINE DETAIL PANEL -->
+    <div class="panel" id="panel-pipeline" role="tabpanel" aria-labelledby="tab-pipeline">
+      <div class="pipe-detail">
+
+        <div class="pipe-detail-row">
+          <div class="pipe-num-lg" style="color:var(--green);border-color:var(--green);">01</div>
+          <div class="pipe-content">
+            <h3>Statistical screening — fast-path fraud detection</h3>
+            <p>A Support Vector Machine (SVM) and Logistic Regression classifier trained on all 31 tabular OkCupid columns. SMOTE oversampling addresses the extreme class imbalance of red-flag profiles. Produces a probabilistic risk score before any text processing begins.</p>
+            <div class="pipe-tech">Tech: <span>scikit-learn SVM · SMOTE (imbalanced-learn) · pandas · OkCupid tabular features</span></div>
+          </div>
+          <span class="badge badge-green">SVM + SMOTE</span>
+        </div>
+
+        <div class="pipe-detail-row">
+          <div class="pipe-num-lg" style="color:var(--blue);border-color:var(--blue);">02</div>
+          <div class="pipe-content">
+            <h3>Linguistic fingerprinting — NLP complexity analysis</h3>
+            <p>TF-IDF vectorisation + VADER sentiment analysis scores emotional tone. Flesch-Kincaid complexity measures readability. LDA topic modeling identifies manipulative thematic clusters — intermittent reinforcement language, identity dissociation, excessive self-referencing.</p>
+            <div class="pipe-tech">Tech: <span>NLTK VADER · sklearn TF-IDF · gensim LDA · textstat · HuggingFace transformers</span></div>
+          </div>
+          <span class="badge badge-blue">NLP</span>
+        </div>
+
+        <div class="pipe-detail-row">
+          <div class="pipe-num-lg" style="color:var(--amber);border-color:var(--amber);">03</div>
+          <div class="pipe-content">
+            <h3>Contradiction engine — veracity cross-referencing</h3>
+            <p>Compares each categorical field ("smokes: no", "diet: vegan") against the free-text essays using regex pattern matching and keyword extraction. When text contradicts a stated field, a Veracity Red Flag is raised with specific textual evidence.</p>
+            <div class="pipe-tech">Tech: <span>Rule-based regex engine · spaCy NER · keyword extraction · field-to-text alignment</span></div>
+          </div>
+          <span class="badge badge-amber">Veracity</span>
+        </div>
+
+        <div class="pipe-detail-row">
+          <div class="pipe-num-lg" style="color:var(--purple);border-color:var(--purple);">04</div>
+          <div class="pipe-content">
+            <h3>Dark Triad scoring — psychological trait mapping</h3>
+            <p>Maps linguistic features to the three Dark Triad traits. Narcissism: admiration-seeking language. Machiavellianism: strategic deception signals, conditional framing. Psychopathy: callousness markers, lack-of-empathy language. Calibrated against OkCupid's 420+ question bank.</p>
+            <div class="pipe-tech">Tech: <span>Custom psycholinguistic feature extractor · OkCupid Q&amp;A mapping · LIWC-style features</span></div>
+          </div>
+          <span class="badge badge-purple">Psych</span>
+        </div>
+
+        <div class="pipe-detail-row">
+          <div class="pipe-num-lg" style="color:var(--red);border-color:var(--red);">05</div>
+          <div class="pipe-content">
+            <h3>LLM semantic reasoning — Chain-of-Thought audit</h3>
+            <p>The structured output of Stages 1–4 is passed to Gemini with a Chain-of-Thought system prompt. The model reasons step-by-step through each signal, cites specific textual evidence, and explains the psychological mechanism behind each flag. The Educational Tip rephrases flags constructively.</p>
+            <div class="pipe-tech">Tech: <span>gemini-1.5-flash · CoT prompting · structured JSON output · social reintegration module</span></div>
+          </div>
+          <span class="badge badge-red">CoT LLM</span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">RedFlag<span class="accent">AI</span></div>
+  <div class="footer-note">Academic project · OkCupid dataset · Built with Gemini AI · For educational purposes only</div>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
