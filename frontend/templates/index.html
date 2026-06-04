@@ -104,7 +104,7 @@
         <div class="status-dot" id="serverDot" aria-hidden="true"></div>
         <span id="serverStatus">AUDIT TERMINAL v2.0 · CONNECTING…</span>
       </div>
-      <div class="app-version">RedFlagAI · Gemini AI</div>
+      <div class="app-version">RedFlagAI</div>
     </div>
 
     <!-- Tab bar -->
@@ -149,6 +149,12 @@
               maxlength="5000"
             ></textarea>
             <div class="char-count" id="charCount">0 / 5000</div>
+
+            <div style="margin-top:10px;margin-bottom:16px;">
+              <label for="fPicture" class="card-label">Profile photo (optional)</label>
+              <input type="file" id="fPicture" accept="image/*" aria-label="Profile photo" />
+              <div style="margin-top:8px;"><img id="picPreview" alt="preview" style="max-width:160px;display:none;border-radius:6px;box-shadow:0 6px 20px rgba(0,0,0,0.08);"/></div>
+            </div>
 
             <div class="field-grid">
               <div class="field-item">
@@ -321,7 +327,7 @@
 <!-- FOOTER -->
 <footer>
   <div class="footer-logo">RedFlag<span class="accent">AI</span></div>
-  <div class="footer-note">Academic project · OkCupid dataset · Built with Gemini AI · For educational purposes only</div>
+  <div class="footer-note">Academic project · OkCupid dataset · For educational purposes only</div>
 </footer>
 
 <script src="/static/app.js"></script>

@@ -53,6 +53,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await checkServer();
   await loadSamplesFromAPI();
   setupCharCounter();
+  setupPictureInput();
 });
 
 /* ── SERVER HEALTH CHECK ────────────────────────────────────────── */
@@ -125,12 +126,35 @@ function loadSample() {
   $('fStatus').value  = s.status;
   $('fAge').value     = s.age;
   updateCharCount(s.bio.length);
+  // clear any previously selected picture when loading a sample
+  window._picture_b64 = null;
+  const preview = $('picPreview');
+  if (preview) { preview.style.display = 'none'; preview.src = ''; }
 }
 
 /* ── CHARACTER COUNTER ──────────────────────────────────────────── */
 function setupCharCounter() {
   const ta = $('bioText');
   ta.addEventListener('input', () => updateCharCount(ta.value.length));
+}
+
+function setupPictureInput() {
+  const input = $('fPicture');
+  if (!input) return;
+  input.addEventListener('change', async (ev) => {
+    const file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      window._picture_b64 = dataUrl;
+      window._picture_name = file.name;
+      window._picture_size_kb = Math.round(file.size / 1024);
+      const preview = $('picPreview');
+      if (preview) { preview.src = dataUrl; preview.style.display = 'block'; }
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function updateCharCount(n) {
@@ -228,6 +252,9 @@ async function runAnalysis() {
     drugs:  $('fDrugs').value,
     status: $('fStatus').value,
     age:    parseInt($('fAge').value) || 28,
+    picture: window._picture_b64 || null,
+    picture_filename: window._picture_name || "",
+    picture_size_kb: window._picture_size_kb || 0,
   };
 
   try {
@@ -269,12 +296,33 @@ function riskClass(score) {
 }
 
 function renderReport(r) {
+  // show picture + bio at top (use local bio input so original essay is displayed)
+  const localBio = $('bioText') ? escHtml($('bioText').value.trim()) : '';
+  const pictureHtml = r.picture_b64 ? `<div class="report-header" style="display:flex;align-items:flex-start;margin-bottom:16px;"><img src="${r.picture_b64}" alt="profile photo" style="max-width:160px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.08);margin-right:16px;"/><div style="flex:1;"><div style="font-size:13px;color:var(--text3);">Bio</div><div style="margin-top:6px;color:var(--text);">${localBio}</div></div></div>` : localBio ? `<div style="margin-bottom:16px;"><div style="font-size:13px;color:var(--text3);">Bio</div><div style="margin-top:6px;color:var(--text);">${localBio}</div></div>` : '';
+
   const flagsHtml  = buildFlagsHtml(r.flags || []);
+  const visualFlagsHtml = buildFlagsHtml(r.visual_flags || []);
   const contradHtml = buildContradHtml(r.contradictions || []);
   const dtHtml     = buildDarkTriadHtml(r.dark_triad);
 
+  const visualFlagsSection = visualFlagsHtml ? `
+      <div class="report-block">
+        ${rbHeader('activity', 'var(--blue)', 'rgba(61,139,255,0.1)', 'Visual object detection', '<span class="badge badge-blue">Picture analysis</span>')}
+        <ul class="flag-list">${visualFlagsHtml}</ul>
+      </div>
+    ` : '';
+
+  const visualExplanationHtml = r.visual_ai_explanation ? `
+      <div class="report-block">
+        ${rbHeader('info', 'var(--blue)', 'rgba(61,139,255,0.1)', 'Visual AI explanation', '<span class="badge badge-blue">Image reasoning</span>')}
+        <div class="cot-block"><span class="cot-prefix">IMAGE INSIGHT // </span>${escHtml(r.visual_ai_explanation)}</div>
+      </div>
+    ` : '';
+
   $('reportContent').innerHTML = `
     <div class="fade-in">
+
+      ${pictureHtml}
 
       <div class="section-label" style="margin-bottom:1rem;">Risk overview</div>
       <div class="risk-overview">
@@ -309,6 +357,8 @@ function renderReport(r) {
         </div>
       </div>
 
+      ${visualFlagsSection}
+
       <div class="report-block">
         ${rbHeader('brain', 'var(--purple)', 'rgba(139,111,232,0.1)', 'Dark Triad scoring', '<span class="badge badge-purple">Psych analysis</span>')}
         ${dtHtml}
@@ -318,6 +368,8 @@ function renderReport(r) {
         ${rbHeader('activity', 'var(--blue)', 'rgba(61,139,255,0.1)', 'Chain-of-Thought reasoning', '<span class="badge badge-blue">Stage 5 · LLM</span>')}
         <div class="cot-block"><span class="cot-prefix">AUDIT REASONING // </span>${escHtml(r.cot_reasoning)}</div>
       </div>
+
+      ${visualExplanationHtml}
 
       <div class="report-block">
         ${rbHeader('heart', 'var(--purple)', 'rgba(139,111,232,0.1)', 'Educational tip', '<span class="badge badge-purple">Social reintegration</span>')}
