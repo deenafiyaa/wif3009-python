@@ -17,14 +17,12 @@
 <!-- NAV -->
 <nav>
   <div class="nav-logo">
-    <div class="dot" aria-hidden="true"></div>
-    RedFlag<span class="accent">AI</span>
-    <span class="nav-badge">BETA</span>
+  <div class="dot" aria-hidden="true"></div>
+  <span class="logo-text">RedFlag<span class="accent">AI</span></span>
   </div>
   <div class="nav-links">
     <a href="#how">How it works</a>
     <a href="#app">Audit</a>
-    <a href="#pipeline">Pipeline</a>
   </div>
 </nav>
 
@@ -64,12 +62,12 @@
     <div class="pipeline-step" role="listitem">
       <div class="pipe-num c-green">01</div>
       <div class="pipe-title">Statistical</div>
-      <div class="pipe-desc">SVM + Logistic Regression on tabular fields. SMOTE for class imbalance.</div>
+      <div class="pipe-desc">Random Forest on tabular fields.</div>
     </div>
     <div class="pipeline-step" role="listitem">
       <div class="pipe-num c-blue">02</div>
       <div class="pipe-title">Linguistic</div>
-      <div class="pipe-desc">TF-IDF + sentiment analysis. Complexity scoring. Topic modeling.</div>
+      <div class="pipe-desc">Sentiment analysis. Complexity scoring. Topic modeling.</div>
     </div>
     <div class="pipeline-step" role="listitem">
       <div class="pipe-num c-amber">03</div>
@@ -84,7 +82,7 @@
     <div class="pipeline-step" role="listitem">
       <div class="pipe-num c-red">05</div>
       <div class="pipe-title">LLM Reasoning</div>
-      <div class="pipe-desc">Chain-of-Thought audit via Gemini AI for semantic explanation.</div>
+      <div class="pipe-desc">Chain-of-Thought audit via OpenRouter AI for semantic explanation.</div>
     </div>
   </div>
 </section>
@@ -116,14 +114,6 @@
       <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-report" id="tab-report" onclick="switchTab('report', this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
         Audit Report
-      </button>
-      <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-metrics" id="tab-metrics" onclick="switchTab('metrics', this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-        Model Metrics
-      </button>
-      <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-pipeline" id="tab-pipeline" onclick="switchTab('pipeline', this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-        Pipeline Detail
       </button>
     </div>
 
@@ -215,7 +205,7 @@
               <div class="pipe-status-row" role="listitem"><span>Linguistic fingerprinting</span><span class="badge badge-green">Active</span></div>
               <div class="pipe-status-row" role="listitem"><span>Contradiction engine</span><span class="badge badge-green">Active</span></div>
               <div class="pipe-status-row" role="listitem"><span>Dark Triad scoring</span><span class="badge badge-green">Active</span></div>
-              <div class="pipe-status-row" role="listitem"><span>LLM reasoning (Gemini)</span><span class="badge badge-blue">Stage 5</span></div>
+              <div class="pipe-status-row" role="listitem"><span>LLM reasoning (OpenRouter)</span><span class="badge badge-green">Active</span></div>
             </div>
 
             <button class="analyze-btn" id="analyzeBtn" onclick="runAnalysis()">
@@ -262,63 +252,6 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
           <p>Model metrics appear after analysis</p>
         </div>
-      </div>
-    </div>
-
-    <!-- PIPELINE DETAIL PANEL -->
-    <div class="panel" id="panel-pipeline" role="tabpanel" aria-labelledby="tab-pipeline">
-      <div class="pipe-detail">
-
-        <div class="pipe-detail-row">
-          <div class="pipe-num-lg" style="color:var(--green);border-color:var(--green);">01</div>
-          <div class="pipe-content">
-            <h3>Statistical screening — fast-path fraud detection</h3>
-            <p>A Support Vector Machine (SVM) and Logistic Regression classifier trained on all 31 tabular OkCupid columns. SMOTE oversampling addresses the extreme class imbalance of red-flag profiles. Produces a probabilistic risk score before any text processing begins.</p>
-            <div class="pipe-tech">Tech: <span>scikit-learn SVM · SMOTE (imbalanced-learn) · pandas · OkCupid tabular features</span></div>
-          </div>
-          <span class="badge badge-green">SVM + SMOTE</span>
-        </div>
-
-        <div class="pipe-detail-row">
-          <div class="pipe-num-lg" style="color:var(--blue);border-color:var(--blue);">02</div>
-          <div class="pipe-content">
-            <h3>Linguistic fingerprinting — NLP complexity analysis</h3>
-            <p>TF-IDF vectorisation + VADER sentiment analysis scores emotional tone. Flesch-Kincaid complexity measures readability. LDA topic modeling identifies manipulative thematic clusters — intermittent reinforcement language, identity dissociation, excessive self-referencing.</p>
-            <div class="pipe-tech">Tech: <span>NLTK VADER · sklearn TF-IDF · gensim LDA · textstat · HuggingFace transformers</span></div>
-          </div>
-          <span class="badge badge-blue">NLP</span>
-        </div>
-
-        <div class="pipe-detail-row">
-          <div class="pipe-num-lg" style="color:var(--amber);border-color:var(--amber);">03</div>
-          <div class="pipe-content">
-            <h3>Contradiction engine — veracity cross-referencing</h3>
-            <p>Compares each categorical field ("smokes: no", "diet: vegan") against the free-text essays using regex pattern matching and keyword extraction. When text contradicts a stated field, a Veracity Red Flag is raised with specific textual evidence.</p>
-            <div class="pipe-tech">Tech: <span>Rule-based regex engine · spaCy NER · keyword extraction · field-to-text alignment</span></div>
-          </div>
-          <span class="badge badge-amber">Veracity</span>
-        </div>
-
-        <div class="pipe-detail-row">
-          <div class="pipe-num-lg" style="color:var(--purple);border-color:var(--purple);">04</div>
-          <div class="pipe-content">
-            <h3>Dark Triad scoring — psychological trait mapping</h3>
-            <p>Maps linguistic features to the three Dark Triad traits. Narcissism: admiration-seeking language. Machiavellianism: strategic deception signals, conditional framing. Psychopathy: callousness markers, lack-of-empathy language. Calibrated against OkCupid's 420+ question bank.</p>
-            <div class="pipe-tech">Tech: <span>Custom psycholinguistic feature extractor · OkCupid Q&amp;A mapping · LIWC-style features</span></div>
-          </div>
-          <span class="badge badge-purple">Psych</span>
-        </div>
-
-        <div class="pipe-detail-row">
-          <div class="pipe-num-lg" style="color:var(--red);border-color:var(--red);">05</div>
-          <div class="pipe-content">
-            <h3>LLM semantic reasoning — Chain-of-Thought audit</h3>
-            <p>The structured output of Stages 1–4 is passed to Gemini with a Chain-of-Thought system prompt. The model reasons step-by-step through each signal, cites specific textual evidence, and explains the psychological mechanism behind each flag. The Educational Tip rephrases flags constructively.</p>
-            <div class="pipe-tech">Tech: <span>gemini-1.5-flash · CoT prompting · structured JSON output · social reintegration module</span></div>
-          </div>
-          <span class="badge badge-red">CoT LLM</span>
-        </div>
-
       </div>
     </div>
   </div>

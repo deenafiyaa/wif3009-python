@@ -11,7 +11,7 @@ const PROGRESS_MSGS = [
   'Stage 2: Extracting linguistic fingerprints…',
   'Stage 3: Cross-referencing contradictions…',
   'Stage 4: Scoring Dark Triad traits…',
-  'Stage 5: Gemini reasoning (Chain-of-Thought)…',
+  'Stage 5: OpenRouter reasoning (Chain-of-Thought)…',
   'Assembling full audit report…',
 ];
 
@@ -69,7 +69,7 @@ async function checkServer() {
     } else {
       dot.classList.add('error');
       text.textContent = 'AUDIT TERMINAL v2.0 · API KEY NOT CONFIGURED';
-      showBanner('⚠ Gemini API key not set on server. Edit backend/.env and restart.', 'warning');
+      showBanner('⚠ OpenRouter API key not set on server. Edit backend/.env and restart.', 'warning');
     }
   } catch {
     dot.classList.add('error');
@@ -239,7 +239,14 @@ async function runAnalysis() {
   const btnText = $('btnText');
   const btnIcon = $('btnIcon');
   btn.disabled = true;
-  btnIcon.innerHTML = '<animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.9s" repeatCount="indefinite"/><circle cx="12" cy="12" r="8" stroke="white" stroke-width="2.5" fill="none" stroke-dasharray="25 51"/>';
+  btnIcon.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="spinner-svg" style="width:20px; height:20px;">
+      <circle cx="12" cy="12" r="8" stroke="rgba(255,255,255,0.2)" fill="none"/>
+      <circle cx="12" cy="12" r="8" stroke="white" fill="none" stroke-dasharray="25 51">
+        <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.9s" repeatCount="indefinite"/>
+      </circle>
+    </svg>
+  `;
   btnText.textContent = 'Analysing…';
 
   const ticker = startProgress();
@@ -282,8 +289,14 @@ async function runAnalysis() {
     switchTab('report', null);
 
   } finally {
+    // 2. Fix the reset state inside the finally block to also keep it a valid SVG:
     btn.disabled = false;
-    btnIcon.innerHTML = '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>';
+    btnIcon.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px; height:20px;">
+        <circle cx="11" cy="11" r="8"/>
+        <path d="m21 21-4.35-4.35"/>
+      </svg>
+    `;
     btnText.textContent = 'Run Full Audit';
   }
 }
