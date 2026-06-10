@@ -15,8 +15,23 @@ just by changing the model name string in .env.
 import re
 import os
 import json
+import base64
+import tempfile
+from typing import Optional
 from openai import OpenAI
 from pydantic import BaseModel
+
+try:
+    from ultralytics import YOLO
+    _YOLO_AVAILABLE = True
+except Exception:
+    _YOLO_AVAILABLE = False
+
+try:
+    from PIL import Image
+    _PIL_AVAILABLE = True
+except Exception:
+    _PIL_AVAILABLE = False
 
 
 # ── PYDANTIC MODELS ────────────────────────────────────────────────────────────
@@ -29,6 +44,9 @@ class ProfileInput(BaseModel):
     drugs: str = "never"
     status: str = "single"
     age: int = 28
+    picture: Optional[str] = None
+    picture_filename: str = ""
+    picture_size_kb: int = 0
 
 
 class DarkTriad(BaseModel):
@@ -73,6 +91,112 @@ class AuditResult(BaseModel):
     stage1_passed: bool
     provider: str       # which AI provider was used (for transparency)
     model_used: str     # exact model name (for transparency)
+    picture_b64: Optional[str] = None
+    visual_flags: list[Flag] = []
+    visual_ai_explanation: Optional[str] = None
+
+
+# ── VISUAL SCORING HELPERS ──────────────────────────────────────────────────
+VISUAL_FLAG_MAP = {
+    'motorcycle': ('behavioral', 'Appears to be riding a motorcycle or superbike', 'high'),
+    'bicycle': ('behavioral', 'Bicycle or cycling gear visible', 'low'),
+    'bottle': ('behavioral', 'Alcohol or bottle visible (possible drinking)', 'medium'),
+    'wine glass': ('behavioral', 'Holding a wine glass (possible drinking)', 'medium'),
+    'cup': ('behavioral', 'Cup or drinking container visible', 'low'),
+    'book': ('identity', 'Book or reading material visible (positive signal)', 'low'),
+    'sports ball': ('identity', 'Sports equipment visible (positive signal)', 'low'),
+    'dog': ('identity', 'Pet present (positive social signal)', 'low'),
+    'cat': ('identity', 'Pet present (positive social signal)', 'low'),
+    'cell phone': ('behavioral', 'Phone visible (neutral)', 'low'),
+}
+
+
+def explain_yolo_objects_with_ai(detected_objects: list[str], profile: ProfileInput) -> str:
+    if not detected_objects:
+        return "IMAGE INSIGHT // No clear objects were detected in the image."
+
+    objects_text = ", ".join(detected_objects)
+
+    # Convert profile details into text so AI can compare image with bio/profile
+    try:
+        profile_data = profile.model_dump()
+    except:
+        profile_data = profile.dict()
+
+    profile_text = "\n".join(
+        f"{key}: {value}" for key, value in profile_data.items() if value
+    )
+
+    prompt = f"""
+    You are an AI assistant explaining objects detected in a dating profile photo.
+
+Detected objects:
+{objects_text}
+
+Profile information:
+{profile_text}
+
+Output format MUST exactly follow this style:
+
+IMAGE INSIGHT // Based on the detected objects:
+
+* Person: Neutral signal (expected in a profile picture)
+* Cup: Neutral signal (could be coffee, tea, or any drink; does not necessarily indicate excessive drinking)
+* Donut: Potential red flag (may suggest indulgent or immature lifestyle if it contradicts the user's bio)
+
+Rules:
+- Start with: IMAGE INSIGHT // Based on the detected objects:
+- Use one bullet point per detected object.
+- Format each bullet as:
+  * Object: Signal type (short explanation)
+- Signal type must be one of:
+  Neutral signal
+  Potential red flag
+  Positive signal
+- Keep explanations short, factual, and non-judgmental.
+- Do NOT infer gender, age, race, religion, or attractiveness.
+- Do NOT write long paragraphs.
+- Maximum 1 sentence per object.
+"""
+
+    # then send `prompt` to your AI model
+
+    openrouter_key = os.getenv("OPENROUTER_API_KEY", "")
+    gemini_key = os.getenv("GEMINI_API_KEY", "")
+
+    if openrouter_key and openrouter_key != "your-openrouter-api-key-here":
+        client = OpenAI(
+            api_key=openrouter_key,
+            base_url="https://openrouter.ai/api/v1",
+        )
+        response = client.chat.completions.create(
+            model=os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct"),
+            messages=[
+                {"role": "system", "content": "You explain YOLO image detections for dating profile safety analysis."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.3,
+            max_tokens=400,
+        )
+        return response.choices[0].message.content or ""
+
+    elif gemini_key and gemini_key != "your-gemini-api-key-here":
+        client = OpenAI(
+            api_key=gemini_key,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        )
+        response = client.chat.completions.create(
+            model="gemini-1.5-flash",
+            messages=[
+                {"role": "system", "content": "You explain YOLO image detections for dating profile safety analysis."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.3,
+            max_tokens=400,
+        )
+        return response.choices[0].message.content or ""
+
+    return "No AI API key configured, so YOLO objects were detected but not explained."
 
 
 # ── STAGE 1: STATISTICAL SCREENING ────────────────────────────────────────────
@@ -401,6 +525,8 @@ Categorical fields:
   drugs:  {profile.drugs}
   status: {profile.status}
   age:    {profile.age}
+  picture_filename: {profile.picture_filename or 'none'}
+  picture_size_kb: {profile.picture_size_kb}
 
 TASK: Perform Stage 5 Chain-of-Thought semantic audit. Refine all scores using your full linguistic understanding. Cite specific bio phrases in cot_reasoning."""
 
@@ -473,6 +599,7 @@ async def run_audit(profile: ProfileInput) -> AuditResult:
     Orchestrates the full 5-stage pipeline.
 
     Stages 1–4 run locally in Python (fast, no API cost).
+    YOLO detects image objects when a picture is supplied.
     Stage 5 calls the configured LLM provider (OpenRouter or Gemini).
     """
 
@@ -482,10 +609,78 @@ async def run_audit(profile: ProfileInput) -> AuditResult:
     contradictions      = stage3_contradictions(profile)
     dark_triad          = stage4_dark_triad(profile.bio)
 
+    # ── YOLO visual detection ───────────────────────────────────
+    visual_flags = []
+    detected_objects = []
+    visual_ai_explanation = ""
+
+    if profile.picture and _YOLO_AVAILABLE:
+        tmp_path = None
+        try:
+            header, b64 = profile.picture.split(",", 1) if "," in profile.picture else ("", profile.picture)
+            img_bytes = base64.b64decode(b64)
+
+            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
+                tf.write(img_bytes)
+                tmp_path = tf.name
+
+            model_path = os.getenv("YOLO_MODEL", "yolov8n.pt")
+            model = YOLO(model_path)
+            results = model.predict(source=tmp_path, verbose=False)
+            det = results[0]
+            names = model.names if hasattr(model, "names") else {}
+
+            if hasattr(det, "boxes") and len(det.boxes) > 0:
+                for box in det.boxes:
+                    try:
+                        cls = int(box.cls.cpu().numpy()[0])
+                    except Exception:
+                        continue
+                    name = names.get(cls, str(cls)).lower()
+                    if isinstance(name, bytes):
+                        name = name.decode()
+                    name_key = name.replace("_", " ")
+                    detected_objects.append(name_key)
+                    if name_key in VISUAL_FLAG_MAP:
+                        cat, txt, sev = VISUAL_FLAG_MAP[name_key]
+                        visual_flags.append(Flag(category=cat, text=txt, severity=sev))
+
+            detected_objects = list(dict.fromkeys(detected_objects))
+            if detected_objects:
+                visual_ai_explanation = explain_yolo_objects_with_ai(detected_objects, profile)
+
+        except Exception as e:
+            print("YOLO detection failed:", e)
+            visual_flags = []
+            detected_objects = []
+            visual_ai_explanation = ""
+
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+
     # ── Stage 5: LLM provider selection ───────────────────────────
     user_msg = _build_user_message(
         profile, s1_score, s1_passed, linguistic, contradictions, dark_triad
     )
+
+    if detected_objects:
+        user_msg += "\n\nYOLO DETECTED OBJECTS:\n"
+        user_msg += ", ".join(detected_objects)
+
+    if visual_flags:
+        user_msg += "\n\nVISUAL FLAGS FROM YOLO MAP:\n"
+        user_msg += "\n".join(
+            f"- {v.text} [category: {v.category}, severity: {v.severity}]"
+            for v in visual_flags
+        )
+
+    if visual_ai_explanation:
+        user_msg += "\n\nAI VISUAL EXPLANATION:\n"
+        user_msg += visual_ai_explanation
 
     openrouter_key = os.getenv("OPENROUTER_API_KEY", "")
     gemini_key     = os.getenv("GEMINI_API_KEY", "")
@@ -515,9 +710,9 @@ async def run_audit(profile: ProfileInput) -> AuditResult:
             "complexity":         linguistic.complexity,
             "manipulation_score": linguistic.manipulation_score,
         })),
-        # Use LLM's contradictions if it found any, otherwise keep Stage 3's findings
         contradictions=[Contradiction(**c) for c in data.get("contradictions", [])] or contradictions,
         flags=[Flag(**f) for f in data.get("flags", [])],
+        visual_flags=visual_flags,
         cot_reasoning=data.get("cot_reasoning", ""),
         educational_tip=data.get("educational_tip", ""),
         precision_estimate=data.get("precision_estimate", 0.80),
@@ -527,4 +722,6 @@ async def run_audit(profile: ProfileInput) -> AuditResult:
         stage1_passed=s1_passed,
         provider=provider_used,
         model_used=model_used,
+        picture_b64=profile.picture,
+        visual_ai_explanation=visual_ai_explanation,
     )

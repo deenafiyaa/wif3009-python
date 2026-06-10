@@ -21,3 +21,4 @@ openpyxl
 scikit-learn
 imbalanced-learn
 joblib
+Pillow
